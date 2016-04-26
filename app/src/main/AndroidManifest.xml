@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="co.poynt.samples.samplereceiptprintingservice" >
+
+    <application
+        android:name=".SampleReceiptPrintingServiceApplication"
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:theme="@style/AppTheme" >
+        <activity
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main" >
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+        <service
+            android:name=".SampleReceiptPrintingService"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="poynt.permission.RECEIPT_PRINTING_SERVICE" >
+            <intent-filter>
+                <action android:name="co.poynt.os.services.v1.IPoyntReceiptPrintingService" />
+            </intent-filter>
+
+            <meta-data
+                android:name="co.poynt.os.service.capability"
+                android:resource="@xml/printing_capabilities" />
+            <meta-data
+                android:name="co.poynt.os.service.logo"
+                android:resource="@drawable/poynt_logo_300dpi_50x50" />
+        </service>
+
+
+    </application>
+
+</manifest>
