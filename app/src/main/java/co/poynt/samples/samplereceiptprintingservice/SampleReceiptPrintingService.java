@@ -49,6 +49,8 @@ import co.poynt.os.services.v1.IPoyntPrinterService;
  * required fields (e.g. AID, auth code,etc.) are printed. Consult your acquiring partner to make
  * sure your app meets their receipt specification
  *
+ * As of 6/6/2016 changing the default receipt printing service requires Poynt to update business
+ * settings for the terminal. Contact Poynt and provide the package name of your receipt service.
  */
 
 public class SampleReceiptPrintingService extends Service {
