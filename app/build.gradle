@@ -26,4 +26,6 @@ dependencies {
     // r81 - onward
     compile 'co.poynt.api:android-api-model:1.2.44@jar'
     compile 'co.poynt.android.sdk:poynt-sdk:1.2.11@aar'
+
+    compile 'com.google.code.gson:gson:2.4'
 }
