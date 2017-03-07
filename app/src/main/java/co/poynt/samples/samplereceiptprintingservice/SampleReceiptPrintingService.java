@@ -3,47 +3,37 @@ package co.poynt.samples.samplereceiptprintingservice;
 
 import android.app.Service;
 import android.content.ComponentName;
-import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.RemoteException;
 import android.util.Log;
 
 import java.util.List;
-import java.util.UUID;
 
+import co.poynt.api.model.BalanceInquiry;
 import co.poynt.api.model.Transaction;
-import co.poynt.os.model.AccessoryProvider;
-import co.poynt.os.model.AccessoryProviderFilter;
-import co.poynt.os.model.AccessoryType;
-import co.poynt.os.model.PoyntError;
+import co.poynt.os.model.Intents;
 import co.poynt.os.model.PrintedReceipt;
-import co.poynt.os.model.PrinterStatus;
-import co.poynt.os.services.v1.IPoyntAccessoryManager;
-import co.poynt.os.services.v1.IPoyntAccessoryManagerListener;
-import co.poynt.os.services.v1.IPoyntPrinterServiceListener;
+import co.poynt.os.model.PrintedReceiptLine;
 import co.poynt.os.services.v1.IPoyntReceiptPrintingService;
 import co.poynt.os.services.v1.IPoyntReceiptPrintingServiceListener;
-import co.poynt.os.services.v1.IPoyntPrinterService;
+import co.poynt.os.services.v1.IPoyntReceiptSendListener;
 
 /**
  * @author Dennis Natochy
- * @date 6/6/2016
+ * @date 3/6/2017
  *
  * This sample app shows how the default Poynt receipt service (IPoyntReceiptPrintingService)
- * can be overrided such that when the customer taps the receipt button on the second screen
- * *printReceipt* function gets called and a custom receipt can be created and printed either to an
- * external printer (using that printer's SDK) or to the built-in printer.
- * The sample below shows how the built-in printer can be discovered using the Accessory Manager
- * service. The built-in printer can be used via IPoyntPrinterService interface and take a bitmap
- * of the receipt in it's printJob function.
+ * can be overridden such that when the customer taps the receipt button on the second screen
+ * *printReceipt* function gets called and a custom receipt can be created
  *
  * Overriding IPoyntReceiptPrintingService has an implication for all the other apps running on
  * the same terminal. So it is your responsibility to be a "good citizen" and implement all of the
- * methods of IPoyntReceiptPrintingService for other apps to be able to print.
+ * methods of IPoyntReceiptPrintingService or forward them to the default implementation of the service.
  *
  * Since you are overriding the default receipt it is also your responsibility to make sure that all
  * required fields (e.g. AID, auth code,etc.) are printed. Consult your acquiring partner to make
@@ -56,129 +46,153 @@ import co.poynt.os.services.v1.IPoyntPrinterService;
 public class SampleReceiptPrintingService extends Service {
 
     private static final String TAG = SampleReceiptPrintingService.class.getSimpleName();
+    private IPoyntReceiptPrintingService poyntReceiptPrintingService;
 
-    /* The code below is needed to locate and print to the built-in thermal printer */
-    IPoyntPrinterService poyntPrinterService;
-    ServiceConnection poyntPrinterConnection;
-    private IPoyntAccessoryManager accessoryManagerService;
-    private ServiceConnection accessoryManagerConnection = new ServiceConnection() {
+
+    private ServiceConnection receiptPrintingConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
-            accessoryManagerService = IPoyntAccessoryManager.Stub.asInterface(service);
-            // if you want to use the built-in printer to print your custom receipt
-            connectToPoyntPrinter();
-            Log.d(TAG, "accessoryManagerConnection onServiceConnected");
+            Log.d(TAG, "connected to Poynt receipt printing service");
+            poyntReceiptPrintingService = IPoyntReceiptPrintingService.Stub.asInterface(service);
         }
 
         @Override
         public void onServiceDisconnected(ComponentName name) {
-            Log.d(TAG, "accessoryManagerConnection onServiceDisconnected, reconnecting...");
-            connectToPoyntPrinter();
+            poyntReceiptPrintingService = null;
+            Log.d(TAG, "onServiceDisconnected: receiptPrintingConnection");
+            bindPoyntReceiptPrintingService();
         }
     };
-
 
 
     private final IPoyntReceiptPrintingService.Stub mBinder = new IPoyntReceiptPrintingService.Stub() {
         public void printTransaction(String jobId, Transaction transaction, long
                 tipAmount, boolean signatureCollected, IPoyntReceiptPrintingServiceListener callback)
                 throws RemoteException {
-            Log.d(TAG, "printTransaction ");
-            // your code
+            Log.d(TAG, "printTransaction");
+            // call default
+            if (poyntReceiptPrintingService != null){
+                poyntReceiptPrintingService.printTransaction(jobId, transaction, tipAmount,
+                        signatureCollected, callback);
+            }
         }
 
         public void printTransactionReceipt(String jobId, String transactionId, long
                 tipAmount, IPoyntReceiptPrintingServiceListener callback) throws RemoteException {
-            Log.d(TAG, "printTransactionReceipt ");
-            // your code
+            Log.d(TAG, "printTransactionReceipt");
+            // call default
+            if (poyntReceiptPrintingService != null){
+                poyntReceiptPrintingService.printTransactionReceipt(jobId, transactionId, tipAmount,
+                        callback);
+            }
         }
 
         public void printOrderReceipt(String jobId, String orderId,
                                       IPoyntReceiptPrintingServiceListener callback) throws RemoteException {
             Log.d(TAG, "printOrderReceipt ");
-            // your code
+            // call default
+            if (poyntReceiptPrintingService != null){
+                poyntReceiptPrintingService.printOrderReceipt(jobId, orderId, callback);
+            }
         }
 
         // This method will be called from the Payment Fragment
-        public void printReceipt(String jobId, PrintedReceipt receipt,
+        public void printReceipt(final String jobId, final PrintedReceipt receipt,
                                  final IPoyntReceiptPrintingServiceListener callback) throws RemoteException {
-            Log.d(TAG, "printReceipt " + accessoryManagerService);
+            //Adding custom footer
+            Log.d(TAG, "printReceipt with PrintedReceipt");
 
-            // If you want to print to the built-in printer you will need to construct
-            // a bitmap of your custom receipt. In this case I am just printing a poynt logo
-            try {
-                poyntPrinterService.printJob(UUID.randomUUID().toString(),
-                        BitmapFactory.decodeResource(getResources(), R.drawable.sample_receipt),
-                        new IPoyntPrinterServiceListener.Stub() {
-                            @Override
-                            public void onPrintResponse(PrinterStatus printerStatus, String s) throws RemoteException {
-                                switch (printerStatus.getCode()){
-                                    case PRINTER_CONNECTED:
-                                        Log.d(TAG, "onPrintResponse: PRINTER_CONNECTED");
-                                        break;
-                                    case PRINTER_DISCONNECTED:
-                                        Log.d(TAG, "onPrintResponse: PRINTER_DISCONNECTED");
-                                        break;
-                                    case PRINTER_UNAVAILABLE:
-                                        Log.d(TAG, "onPrintResponse: PRINTER_UNAVAILABLE");
-                                        // notify the callback function
-                                        callback.printFailed();
-                                        break;
-                                    case PRINTER_JOB_PRINTED:
-                                        Log.d(TAG, "onPrintResponse: PRINTER_JOB_PRINTED");
-                                        break;
-                                    case PRINTER_JOB_FAILED:
-                                        Log.d(TAG, "onPrintResponse: PRINTER_JOB_FAILED");
-                                        callback.printFailed();
-                                        break;
-                                    case PRINTER_JOB_QUEUED:
-                                        Log.d(TAG, "onPrintResponse: PRINTER_JOB_QUEUED");
-                                        callback.printQueued();
-                                        break;
-                                    case PRINTER_ERROR_OUT_OF_PAPER:
-                                        Log.d(TAG, "onPrintResponse: PRINTER_ERROR_OUT_OF_PAPER");
-                                        callback.printFailed();
-                                        break;
-                                    case PRINTER_ERROR_OTHER:
-                                        Log.d(TAG, "onPrintResponse: PRINTER_ERROR_OTHER");
-                                        callback.printFailed();
-                                        break;
-                                    default:
-                                        Log.d(TAG, "onPrintResponse: This should not happen");
-                                        callback.printFailed();
-                                        break;
-                                }
+            List<PrintedReceiptLine> footerLines = receipt.getFooter();
+            PrintedReceiptLine line = new PrintedReceiptLine();
+            line.setText("Congrats! You've earned 50");
+            PrintedReceiptLine line2 = new PrintedReceiptLine();
+            line2.setText("points!");
+            PrintedReceiptLine blank = new PrintedReceiptLine();
+            blank.setText("");
 
-                            }
-                        });
-            } catch (RemoteException e) {
-                e.printStackTrace();
-                callback.printFailed();
+            // insert custom content at the top of the footer lines
+            footerLines.add(0, line);
+            footerLines.add(1, line2);
+            footerLines.add(2, blank);
+
+            Handler h = new Handler(Looper.getMainLooper());
+            Runnable r = new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        poyntReceiptPrintingService.printReceipt(jobId, receipt, callback);
+                    } catch (RemoteException e) {
+                        e.printStackTrace();
+                    }
+                }
+            };
+            if (poyntReceiptPrintingService != null){
+                Log.d(TAG, "printReceiptPrintingService was not null");
+                h.post(r);
+            }else{
+                Log.d(TAG, "printReceiptPrintingService was null: ");
+                h.postDelayed(r, 2000l);
             }
         }
 
         public void printBitmap(String jobId, Bitmap bitmap,
                                 IPoyntReceiptPrintingServiceListener callback) throws RemoteException {
             Log.d(TAG, "printBitmap ");
-            // your code
+            // call default
+            if (poyntReceiptPrintingService != null){
+                poyntReceiptPrintingService.printBitmap(jobId, bitmap, callback);
+            }
+        }
+
+        @Override
+        public void printStayReceipt(String s, String s1,
+                                     IPoyntReceiptPrintingServiceListener callback) throws RemoteException {
+            Log.d(TAG, "printStayReceipt: ");
+            // call default
+            if (poyntReceiptPrintingService != null){
+                poyntReceiptPrintingService.printStayReceipt(s, s1, callback);
+            }
+        }
+
+        @Override
+        public void printBalanceInquiry(String s, BalanceInquiry balanceInquiry,
+                                        IPoyntReceiptPrintingServiceListener callback) throws RemoteException {
+            Log.d(TAG, "printBalanceInquiry: ");
+            // call default
+            if (poyntReceiptPrintingService != null){
+                poyntReceiptPrintingService.printBalanceInquiry(s, balanceInquiry, callback);
+            }
+        }
+
+        @Override
+        public void sendReceipt(String orderId, String transactionId, String email, String phoneNumber,
+                                IPoyntReceiptSendListener callback) throws RemoteException {
+            Log.d(TAG, "sendReceipt: ");
+            if (poyntReceiptPrintingService != null) {
+                poyntReceiptPrintingService.sendReceipt(orderId, transactionId, email, phoneNumber, callback);
+            }else{
+                bindPoyntReceiptPrintingService();
+            }
         }
     };
 
     @Override
     public void onCreate() {
         super.onCreate();
-        bindService(new Intent(IPoyntAccessoryManager.class.getName()), accessoryManagerConnection, BIND_AUTO_CREATE);
+        bindPoyntReceiptPrintingService();
+    }
 
+    private void bindPoyntReceiptPrintingService() {
+        if (poyntReceiptPrintingService == null){
+            bindService(Intents.getComponentIntent(Intents.COMPONENT_POYNT_RECEIPT_PRINTING_SERVICE),
+                    receiptPrintingConnection, BIND_AUTO_CREATE);
+        }
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
-        unbindService(accessoryManagerConnection);
-    }
-
-    public SampleReceiptPrintingService() {
-        Log.d(TAG, "constructor");
+        unbindService(receiptPrintingConnection);
     }
 
     @Override
@@ -187,56 +201,6 @@ public class SampleReceiptPrintingService extends Service {
         return mBinder;
     }
 
-    private void connectToPoyntPrinter(){
-        AccessoryProviderFilter filter = new AccessoryProviderFilter(AccessoryType.PRINTER);
-        try {
-            accessoryManagerService.getAccessoryProviders(filter, new IPoyntAccessoryManagerListener.Stub() {
-                @Override
-                public void onError(PoyntError poyntError) throws RemoteException {
-                    // TODO Handle this case if you are using Accessory Manager to discover available printers
-                }
-
-                @Override
-                public void onSuccess(List<AccessoryProvider> printers) throws RemoteException {
-                    Log.d(TAG, "onSuccess: getAccessoryProvider");
-                    for (AccessoryProvider printer : printers) {
-                        Log.d(TAG, "---------------------------------------");
-                        Log.d(TAG, "printer name: " + printer.getProviderName());
-                        Log.d(TAG, "printer id: " + printer.getId());
-                        Log.d(TAG, "printer class name: " + printer.getClassName());
-                        Log.d(TAG, "printer package name: " + printer.getPackageName());
-                        Log.d(TAG, "printer is connected: " + printer.isConnected());
-
-
-                        // select build-in Poynt printer and make sure it is not disabled
-                        if (printer.isConnected() &&
-                                "co.poynt.services.PoyntPrinterService".equals(printer.getClassName())) {
-                            Intent intent = new Intent();
-                            intent.setClassName(printer.getPackageName(), printer.getClassName());
-
-                            poyntPrinterConnection = new ServiceConnection() {
-                                @Override
-                                public void onServiceConnected(ComponentName name, IBinder service) {
-                                    poyntPrinterService = IPoyntPrinterService.Stub.asInterface(service);
-                                }
-                                @Override
-                                public void onServiceDisconnected(ComponentName name) {
-                                    Log.d(TAG, "onServiceDisconnected: poynt printer connection");
-                                }
-                            };
-
-                            bindService(intent,
-                                    poyntPrinterConnection, Context.BIND_AUTO_CREATE);
-
-                            break;
-                        }
-                    }
-                }
-            });
-        } catch (RemoteException e) {
-            e.printStackTrace();
-        }
-    }
 }
 
 

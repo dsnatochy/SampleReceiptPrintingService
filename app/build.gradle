@@ -23,9 +23,12 @@ dependencies {
     compile fileTree(dir: 'libs', include: ['*.jar'])
     compile 'com.android.support:appcompat-v7:24.0.0-alpha1'
 
+    compile 'co.poynt.android.sdk:poynt-sdk:1.2.24-SNAPSHOT@aar'
+    compile 'co.poynt.api:android-api-model:1.2.90@jar'
+
     // r81 - onward
-    compile 'co.poynt.api:android-api-model:1.2.44@jar'
-    compile 'co.poynt.android.sdk:poynt-sdk:1.2.11@aar'
+//    compile 'co.poynt.api:android-api-model:1.2.44@jar'
+//    compile 'co.poynt.android.sdk:poynt-sdk:1.2.11@aar'
 
     compile 'com.google.code.gson:gson:2.4'
 }
