@@ -6,6 +6,7 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.graphics.Bitmap;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -173,6 +174,48 @@ public class SampleReceiptPrintingService extends Service {
             }else{
                 bindPoyntReceiptPrintingService();
             }
+        }
+
+        @Override
+        public void printTransactionReceiptWithOptions(String s, String s1, long l, Bundle bundle, IPoyntReceiptPrintingServiceListener iPoyntReceiptPrintingServiceListener) throws RemoteException {
+            Log.d(TAG, "printTransactionReceiptWithOptions: ");
+        }
+
+        @Override
+        public void printStayReceiptWithOptions(String s, String s1, Bundle bundle, IPoyntReceiptPrintingServiceListener iPoyntReceiptPrintingServiceListener) throws RemoteException {
+            Log.d(TAG, "printStayReceiptWithOptions: ");
+        }
+
+        @Override
+        public void printBalanceInquiryWithOptions(String s, BalanceInquiry balanceInquiry, Bundle bundle, IPoyntReceiptPrintingServiceListener iPoyntReceiptPrintingServiceListener) throws RemoteException {
+            Log.d(TAG, "printBalanceInquiryWithOptions: ");
+        }
+
+        /**
+         * Print a Receipt with the given Transaction/ORDER/STAY information passed as options.
+         * If Transaction is passed, transaction information is always printed in addition to
+         * order or stay objects as necessary as details.
+         * <p>
+         * <p>
+         * Bundle can contain the following:
+         * <p>
+         * TRANSACTION: Transaction object associated with this payment
+         * TIP_AMOUNT:  Tip Amount (type: Long) to override and print on receipt
+         * <p>
+         * STAY: Stay object associated with this payment
+         * TRANSACTION_ACTION: TransactionAction action (string)  used for Stay Receipt
+         * ADJUST_TO_ADD_CHARGES: Boolean to indicate adjustToAddCharges
+         * <p>
+         * ORDER: Order object associated with this payment
+         * BALANCE_INQUIRY: BalanceInquiry object
+         *
+         *
+         * @param jobId
+         * @param receiptOptions
+         * @param callback
+         */
+        public void printReceiptWithOptions(String jobId, Bundle receiptOptions, IPoyntReceiptPrintingServiceListener callback) throws RemoteException {
+            Log.d(TAG, "printReceiptWithOptions: ");
         }
     };
 
